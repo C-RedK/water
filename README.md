@@ -51,5 +51,3 @@ Explanation of parameters:
 
 A full list of configuration parameters and their descriptions are given in `utils/options.py`.
 For examples of running FedRep as well as the FL baselines we compare against, please see the executable files in `scripts/`, which recover the results from the paper.
-
-caonima
