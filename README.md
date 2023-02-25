@@ -1,15 +1,9 @@
-# Exploiting Shared Representations for Personalized Federated Learning (ICML 2021)
-
-Authors: Liam Collins, Hamed Hassani, Aryan Mokhtari, Sanjay Shakkottai
-
-This repository contains the official code for our proposed method, FedRep, and the experiments in our paper [Exploiting Shared Representations for Personalized Federated Learning](https://arxiv.org/pdf/2102.07078.pdf).
-
-*This paper has been accepted at ICML 2021.*
+## 参考文献
+ [Exploiting Shared Representations for Personalized Federated Learning](https://arxiv.org/pdf/2102.07078.pdf).(ICML 2021)
 
 <img src="fedrep.png" width="500" height="360" />
 
 ## Dependencies
-
 The code requires Python >= 3.6 and PyTorch >= 1.2.0. To install the other dependencies: `pip3 install -r requirements.txt`.
 
 ## Data
@@ -57,20 +51,3 @@ Explanation of parameters:
 
 A full list of configuration parameters and their descriptions are given in `utils/options.py`.
 For examples of running FedRep as well as the FL baselines we compare against, please see the executable files in `scripts/`, which recover the results from the paper.
-
-## Citation
-
-Please cite our paper if you use our implementation of FedRep:
-
-```
-@article{collins2021exploiting,
-  title={Exploiting Shared Representations for Personalized Federated Learning},
-  author={Collins, Liam and Hassani, Hamed and Mokhtari, Aryan and Shakkottai, Sanjay},
-  journal={arXiv preprint arXiv:2102.07078},
-  year={2021}
-}
-```
-
-# Acknowledgements
-
-Much of the code in this repository was adapted from code in [this repository](https://github.com/pliang279/LG-FedAvg) by Paul Pu Liang et al., which in turn was adapted from [this repository](https://github.com/shaoxiongji/federated-learning) by Shaoxiong Ji. For the implementation of Per-FedAvg, some of the code was adapted from the MAML PyTorch implementation [here](https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch) by Antreas Antoniou.
