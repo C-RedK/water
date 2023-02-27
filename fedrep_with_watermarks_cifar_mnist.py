@@ -244,14 +244,14 @@ if __name__ == '__main__':
     print(accs)
 
     base_dir = './save/accs_' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-        args.shard_per_user) + args.use_watermark + '.csv'
+        args.shard_per_user) + str(args.use_watermark) + '.csv'
     user_save_path = base_dir
     accs = np.array(accs)
     accs = pd.DataFrame(accs, columns=['accs'])
     accs.to_csv(base_dir, index=False)
 
     base_dir = './save/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-        args.shard_per_user) + args.use_watermark + '.csv'
+        args.shard_per_user) + str(args.use_watermark) + '.csv'
     success_rates = np.array(success_rates)
-    success_rates = pd.DataFrame(success_rates, columns=success_rates)
+    success_rates = pd.DataFrame(success_rates, columns=['success_rates'])
     success_rates.to_csv(base_dir, index=False)
