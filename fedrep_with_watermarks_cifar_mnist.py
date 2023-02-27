@@ -24,10 +24,11 @@ from utils.watermark import get_X, get_b, get_layer_weights_and_predict, compute
 import time
 
 if __name__ == '__main__':
-    # parse args
+    # Step1：参数初始化
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
+    # Step2：客户数据集初始化
     lens = np.ones(args.num_users)
     if 'cifar' in args.dataset or args.dataset == 'mnist':
         dataset_train, dataset_test, dict_users_train, dict_users_test = get_data(args)
@@ -36,12 +37,12 @@ if __name__ == '__main__':
     else:
         raise Exception
 
-    print("args.alg:{}".format(args.alg))
-
-    # build model
+    # print("args.alg:{}".format(args.alg)) #tyl：和之前一样，统一打印需要观测的实验参数
+    
+    # Step3：模型初始化
     net_glob = get_model(args)
-    net_glob.train()
-    if args.load_fed != 'n':
+    net_glob.train()  # tyl:这个步骤原因？
+    if args.load_fed != 'n': 
         fed_model_path = './save/' + args.load_fed + '.pt'
         net_glob.load_state_dict(torch.load(fed_model_path))
 
@@ -50,6 +51,7 @@ if __name__ == '__main__':
     print(net_glob.state_dict().keys())
     net_keys = [*net_glob.state_dict().keys()]
 
+    # Step4：水印信息初始化
     # build watermark----------------------------------------------------------------------------------------------
     dict_X = None
     dict_b = None
@@ -58,6 +60,7 @@ if __name__ == '__main__':
         dict_b = get_b(embed_dim=args.embed_dim, num_users=args.num_users)
     # build watermark----------------------------------------------------------------------------------------------
 
+    # Step5：表示层参数与全局模型解耦
     # specify the representation parameters (in w_glob_keys) and head parameters (all others)
     w_glob_keys = []
     if args.alg == 'fedrep' or args.alg == 'fedper':
@@ -67,7 +70,6 @@ if __name__ == '__main__':
             w_glob_keys = [net_glob.weight_keys[i] for i in [0, 1, 3, 4]]
         else:
             raise Exception
-
     if args.alg == 'fedavg':
         w_glob_keys = []
     if 'sent140' not in args.dataset:
@@ -75,11 +77,12 @@ if __name__ == '__main__':
         w_glob_keys = list(itertools.chain.from_iterable(w_glob_keys))
 
     print('total_num_layers:{}'.format(total_num_layers))
-    print('w_glob_keys:{}'.format(w_glob_keys))
-    print('net_keys:{}'.format(net_keys))
+    print('w_glob_keys:{}'.format(w_glob_keys)) #tyl：表示层模型keys
+    print('net_keys:{}'.format(net_keys)) # tyl：全局模型keys
+    # tyl：这部分统计表示层参数总数和总的参数总数，后面似乎也没用到，考虑后面注释掉
     if args.alg == 'fedrep':
-        num_param_glob = 0
-        num_param_local = 0
+        num_param_glob = 0 # tyl：统计表示层参数个数
+        num_param_local = 0 #tyl：统计所有层参数个数
         for key in net_glob.state_dict().keys():
             # tensor.numel() 统计tensor中元素的个数
             num_param_local += net_glob.state_dict()[key].numel()
@@ -91,8 +94,9 @@ if __name__ == '__main__':
             num_param_local, num_param_glob, percentage_param, num_param_glob, num_param_local))
     print("learning rate:{}, batch size:{}".format(args.lr, args.local_bs))
 
+    # Step6：Client模型参数初始化
     # generate list of local models for each user
-    net_local_list = []
+    net_local_list = [] #tyl：没用到？
     # w_locals:客户端中拥有的参数
     # 我感觉下面这些代码是
     w_locals = {}
@@ -102,6 +106,7 @@ if __name__ == '__main__':
             w_local_dict[key] = net_glob.state_dict()[key]
         w_locals[user] = w_local_dict
 
+    # Step7：模型训练与水印嵌入
     # training
     indd = None  # indices of embedding for sent140
     loss_train = []
@@ -117,6 +122,7 @@ if __name__ == '__main__':
         m = max(int(args.frac * args.num_users), 1)
         # 最后一轮训练慢的原因是 最后一轮选择了全部客户端进行训练，所以才会这么慢
         # 原本可能选十几二十个，但是现在是所有的都他妈的要来训练，自然就满了
+        # tyl：可以考虑最后一轮正常还是采样训练，多加一轮进行测试精度和测试水印（这样合理一点！）
         if iter == args.epochs:
             m = args.num_users
 
@@ -126,7 +132,7 @@ if __name__ == '__main__':
         total_len = 0
         for ind, idx in enumerate(idxs_users):
             start_in = time.time()
-
+            # tyl：这个if判断感觉没用啊，而且这个类对象不应该只需要每个client执行一次吗？
             if args.epochs == iter:
                 # 都是500，没啥影响
                 local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_ft],
@@ -137,19 +143,24 @@ if __name__ == '__main__':
 
             net_local = copy.deepcopy(net_glob)
             w_local = net_local.state_dict()
+            # tyl：确保w_local中head部分发生变化
             if args.alg != 'fedavg':
                 for k in w_locals[idx].keys():
                     if k not in w_glob_keys:
                         w_local[k] = w_locals[idx][k]
             # 为什么还需要load_state_dict呢？我好像知道了
             net_local.load_state_dict(w_local)
+
+            # tyl：这样逻辑就不太好了，训练和水印验证放在一起
             last = iter == args.epochs
             w_local, loss, indd, success_rate = local.train(net=net_local.to(args.device), idx=idx,
                                                             w_glob_keys=w_glob_keys,
                                                             lr=args.lr, last=last, args=args, net_glob=net_glob)
+            
             success_rates.append(success_rate)
             loss_locals.append(copy.deepcopy(loss))
             total_len += lens[idx]
+            # tyl：这里写的不太直观，解释一下
             if len(w_glob) == 0:
                 w_glob = copy.deepcopy(w_local)
                 for k, key in enumerate(net_glob.state_dict().keys()):
@@ -166,6 +177,7 @@ if __name__ == '__main__':
                     w_locals[idx][key] = w_local[key]
 
             times_in.append(time.time() - start_in)
+        # tyl:采样客户训练完毕   
         loss_avg = sum(loss_locals) / len(loss_locals)
         loss_train.append(loss_avg)
 

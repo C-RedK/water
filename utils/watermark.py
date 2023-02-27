@@ -20,7 +20,7 @@ def get_b(embed_dim, num_users):
 
 
 def get_layer_weights_and_predict(model, w):
-    p = model.param()
+    p = model.params()
     p = p.cpu().view(1, -1).detach().numpy()
     pred_bparam = np.dot(p, w)  # dot product np.dot是矩阵乘法运算
     # print(pred_bparam)
