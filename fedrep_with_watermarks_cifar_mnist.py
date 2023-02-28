@@ -53,11 +53,8 @@ if __name__ == '__main__':
 
     # Step4：水印信息初始化
     # build watermark----------------------------------------------------------------------------------------------
-    dict_X = None
-    dict_b = None
-    if args.use_watermark:
-        dict_X = get_X(net_glob=net_glob, embed_dim=args.embed_dim, num_users=args.num_users)
-        dict_b = get_b(embed_dim=args.embed_dim, num_users=args.num_users)
+    dict_X = get_X(net_glob=net_glob, embed_dim=args.embed_dim, num_users=args.num_users)
+    dict_b = get_b(embed_dim=args.embed_dim, num_users=args.num_users)
     # build watermark----------------------------------------------------------------------------------------------
 
     # Step5：表示层参数与全局模型解耦
