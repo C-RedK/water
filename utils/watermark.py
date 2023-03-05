@@ -1,5 +1,6 @@
 import numpy as np
-
+import torch.nn as nn
+from collections import OrderedDict
 
 def get_X(net_glob, embed_dim, num_users, use_watermark=False):
     dict_X = {}
@@ -29,8 +30,13 @@ def get_b(embed_dim, num_users, use_watermark=False):
 
 
 def get_layer_weights_and_predict(model, w):
-    p = model.params()
-    p = p.cpu().view(1, -1).detach().numpy()
+    if isinstance(model,nn.Module):
+        p = model.params()
+        p = p.cpu().view(1, -1).detach().numpy()
+    elif isinstance(model,dict):
+        # 反正是在最后一层嵌入，写死算求
+        p = model['fc3.weight']
+        p = p.view(1, -1).detach().numpy()
     pred_bparam = np.dot(p, w)  # dot product np.dot是矩阵乘法运算
     # print(pred_bparam)
     pred_bparam = np.sign(pred_bparam)

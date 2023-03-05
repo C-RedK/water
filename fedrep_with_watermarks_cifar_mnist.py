@@ -156,9 +156,8 @@ def main(args,rd):
                                                             lr=args.lr, last=last, args=args, net_glob=net_glob)
             # zyb：分离水印嵌入和验证过程
             success_rate = local.validate(net=net_local.to(args.device))
-
-            
             success_rates.append(success_rate)
+
             loss_locals.append(copy.deepcopy(loss))
             total_len += lens[idx]
             # tyl：这里写的不太直观，解释一下
@@ -176,7 +175,15 @@ def main(args,rd):
                     else:
                         w_glob[key] += w_local[key] * lens[idx]
                     w_locals[idx][key] = w_local[key]
-
+            
+            # zyb：验证其他所有人的水印
+            one_for_all_clients_rates = []
+            for i in range(args.num_users):
+                one_for_all_clients_rates.append(local.validate(net=w_locals[i]))
+            # 没有保存，先简单打印出来看看效果，确实是热图的效果
+            # 其他的都一样是因为，初始化成一样的了，多训练几轮就不一样了ok？
+            print(one_for_all_clients_rates)
+            
             times_in.append(time.time() - start_in)
         # tyl:采样客户训练完毕   
         loss_avg = sum(loss_locals) / len(loss_locals)
