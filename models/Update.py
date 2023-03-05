@@ -657,14 +657,13 @@ class LocalUpdate(object):
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
 
-        # 验证部分---------------------------------------------------------------------------------------
-        success_rate = -1
-        if args.use_watermark:
-            pred_b = get_layer_weights_and_predict(net, self.X.numpy())
-            success_rate = compute_BER(pred_b=pred_b, b=self.b.numpy())
-        # 验证部分---------------------------------------------------------------------------------------
+        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), self.indd
 
-        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), self.indd, success_rate
+    def validate(self,net):
+        success_rate = -1
+        pred_b = get_layer_weights_and_predict(net,self.X.numpy())
+        success_rate = compute_BER(pred_b=pred_b,b=self.b.numpy())
+        return success_rate
 
 
 class LocalUpdateMTL(object):

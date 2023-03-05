@@ -14,18 +14,19 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import nn
+import os
 
 from utils.options import args_parser
 from utils.train_utils import get_data, get_model, read_data
 from models.Update import LocalUpdate
 from models.test import test_img_local_all
-from utils.watermark import get_X, get_b, get_layer_weights_and_predict, compute_BER
+from utils.watermark import get_X, get_b
 
 import time
 
-if __name__ == '__main__':
+def main(args,rd):
+    
     # Step1：参数初始化
-    args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
     # Step2：客户数据集初始化
@@ -150,9 +151,12 @@ if __name__ == '__main__':
 
             # tyl：这样逻辑就不太好了，训练和水印验证放在一起
             last = iter == args.epochs
-            w_local, loss, indd, success_rate = local.train(net=net_local.to(args.device), idx=idx,
+            w_local, loss, indd = local.train(net=net_local.to(args.device), idx=idx,
                                                             w_glob_keys=w_glob_keys,
                                                             lr=args.lr, last=last, args=args, net_glob=net_glob)
+            # zyb：分离水印嵌入和验证过程
+            success_rate = local.validate(net=net_local.to(args.device))
+
             
             success_rates.append(success_rate)
             loss_locals.append(copy.deepcopy(loss))
@@ -240,15 +244,28 @@ if __name__ == '__main__':
     print(times)
     print(accs)
 
-    base_dir = './save/accs_' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-        args.shard_per_user) + str(args.use_watermark) + '.csv'
-    user_save_path = base_dir
+    accs_dir = './save/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+        args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+    if not os.path.exists(accs_dir):
+        pd.DataFrame().to_excel(accs_dir)
     accs = np.array(accs)
-    accs = pd.DataFrame(accs, columns=['accs'])
-    accs.to_csv(base_dir, index=False)
+    df = pd.read_excel(accs_dir)
+    df['acc_seed{}'.format(rd)] = accs
+    df.to_excel(accs_dir, index=False)
 
-    base_dir = './save/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-        args.shard_per_user) + str(args.use_watermark) + '.csv'
+    succ_rates_dir = './save/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
+        args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+    if not os.path.exists(succ_rates_dir):
+        pd.DataFrame().to_excel(succ_rates_dir)
     success_rates = np.array(success_rates)
-    success_rates = pd.DataFrame(success_rates, columns=['success_rates'])
-    success_rates.to_csv(base_dir, index=False)
+    df = pd.read_excel(succ_rates_dir)
+    df['success_rates_seed{}'.format(rd)] = success_rates
+    df.to_excel(succ_rates_dir, index=False)
+
+
+if __name__ == '__main__':
+    # 设置种子以便复现
+    args = args_parser()
+    # 一共跑十次实验，看看效果
+    for i in range(10):
+        main(args=args, rd=i)
