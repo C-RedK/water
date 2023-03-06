@@ -114,6 +114,7 @@ def main(args,rd):
     accs10_glob = 0
     success_rates = []
     start = time.time()
+    all_one_for_all_clients_rates = []
     for iter in range(args.epochs + 1):
         w_glob = {}
         loss_locals = []
@@ -125,6 +126,7 @@ def main(args,rd):
             m = args.num_users
 
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
+        idxs_users.sort()
         w_keys_epoch = w_glob_keys
         times_in = []
         total_len = 0
@@ -175,15 +177,14 @@ def main(args,rd):
                     else:
                         w_glob[key] += w_local[key] * lens[idx]
                     w_locals[idx][key] = w_local[key]
-            
-            # zyb：验证其他所有人的水印
-            one_for_all_clients_rates = []
-            for i in range(args.num_users):
-                one_for_all_clients_rates.append(local.validate(net=w_locals[i]))
-            # 没有保存，先简单打印出来看看效果，确实是热图的效果
-            # 其他的都一样是因为，初始化成一样的了，多训练几轮就不一样了ok？
-            print(one_for_all_clients_rates)
-            
+
+            # zyb:在最后一轮，所有人都验证所有人的水印，得出可以画热力图的数据
+            if last and args.use_watermark:
+                one_for_all_clients_rates = []
+                for i in range(args.num_users):
+                    one_for_all_clients_rates.append(local.validate(net=w_locals[i]))
+                all_one_for_all_clients_rates.append(one_for_all_clients_rates)
+                
             times_in.append(time.time() - start_in)
         # tyl:采样客户训练完毕   
         loss_avg = sum(loss_locals) / len(loss_locals)
@@ -269,10 +270,18 @@ def main(args,rd):
     df['success_rates_seed{}'.format(rd)] = success_rates
     df.to_excel(succ_rates_dir, index=False)
 
+    if args.use_watermark:
+
+        all_detect_all_dir = './save/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
+            args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+        
+        all_one_for_all_clients_rates = np.array(all_one_for_all_clients_rates)
+        all_one_for_all_clients_rates = np.transpose(all_one_for_all_clients_rates)
+        df = pd.DataFrame(all_one_for_all_clients_rates)
+        df.to_excel(all_detect_all_dir)
+
 
 if __name__ == '__main__':
-    # 设置种子以便复现
     args = args_parser()
-    # 一共跑十次实验，看看效果
     for i in range(10):
         main(args=args, rd=i)
