@@ -21,11 +21,23 @@ from utils.train_utils import get_data, get_model, read_data
 from models.Update import LocalUpdate
 from models.test import test_img_local_all
 from utils.watermark import get_X, get_b
+from torch.backends import cudnn
 
 import time
+import random
 
-def main(args,rd):
-    
+def init_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed=seed)
+    torch.manual_seed(seed=seed)
+    torch.cuda.manual_seed(seed=seed)
+    torch.cuda.manual_seed_all(seed=seed)
+
+
+def main(args,rd,seed):
+    # Step1:设置随机种子,保证结果可复现
+    init_seed(seed=seed)
+
     # Step1：参数初始化
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
@@ -162,6 +174,14 @@ def main(args,rd):
 
             loss_locals.append(copy.deepcopy(loss))
             total_len += lens[idx]
+
+            # zyb 保存head为numpy格式
+            if not os.path.exists('./save/heads'):
+                os.makedirs('./save/heads')
+            np.save('./save/heads/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(idx) +'weight.npy',w_local['fc3.weight'].numpy())
+            np.save('./save/heads/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(idx) +'bias.npy',w_local['fc3.bias'].numpy())
             # tyl：这里写的不太直观，解释一下
             if len(w_glob) == 0:
                 w_glob = copy.deepcopy(w_local)
@@ -240,7 +260,9 @@ def main(args,rd):
                 accs10_glob += acc_test / 10
 
         if iter % args.save_every == args.save_every - 1:
-            model_save_path = './save/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            if not os.path.exists("./save/glob_models"):
+                os.makedirs("./save/glob_models")
+            model_save_path = './save/glob_models/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) + '_iter' + str(iter) + '.pt'
             torch.save(net_glob.state_dict(), model_save_path)
 
@@ -253,7 +275,7 @@ def main(args,rd):
     print(accs)
 
     accs_dir = './save/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-        args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+        args.shard_per_user) + str(args.use_watermark) +str(args.embed_dim)+str(args.frac) +  '.xlsx'
     if not os.path.exists(accs_dir):
         pd.DataFrame().to_excel(accs_dir)
     accs = np.array(accs)
@@ -262,7 +284,7 @@ def main(args,rd):
     df.to_excel(accs_dir, index=False)
 
     succ_rates_dir = './save/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-        args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+        args.shard_per_user) + str(args.use_watermark) +str(args.embed_dim)+str(args.frac) + '.xlsx'
     if not os.path.exists(succ_rates_dir):
         pd.DataFrame().to_excel(succ_rates_dir)
     success_rates = np.array(success_rates)
@@ -270,18 +292,17 @@ def main(args,rd):
     df['success_rates_seed{}'.format(rd)] = success_rates
     df.to_excel(succ_rates_dir, index=False)
 
+    # 热力图的数据
     if args.use_watermark:
-
         all_detect_all_dir = './save/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-            args.shard_per_user) + str(args.use_watermark) + '.xlsx'
+            args.shard_per_user) + str(args.use_watermark) + str(args.embed_dim)+str(args.frac) + '.xlsx'
         
         all_one_for_all_clients_rates = np.array(all_one_for_all_clients_rates)
         all_one_for_all_clients_rates = np.transpose(all_one_for_all_clients_rates)
         df = pd.DataFrame(all_one_for_all_clients_rates)
         df.to_excel(all_detect_all_dir)
 
-
 if __name__ == '__main__':
     args = args_parser()
     for i in range(10):
-        main(args=args, rd=i)
+        main(args=args, rd=i, seed=i)

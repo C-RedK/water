@@ -12,7 +12,7 @@ def args_parser():
     parser.add_argument('--num_users', type=int, default=100, help="number of users: n")
     parser.add_argument('--shard_per_user', type=int, default=2, help="classes per user")
     parser.add_argument('--frac', type=float, default=0.1, help="the fraction of clients: C")
-    parser.add_argument('--local_ep', type=int, default=5, help="the number of local epochs: E")
+    parser.add_argument('--local_ep', type=int, default=11, help="the number of local epochs: E")
     parser.add_argument('--local_bs', type=int, default=10, help="local batch size: B")
     parser.add_argument('--bs', type=int, default=128, help="test batch size")
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
@@ -68,7 +68,7 @@ def args_parser():
     # build watermark
     parser.add_argument('--use_watermark', type=bool, default=True, help="决定是否要用水印")
     parser.add_argument('--embed_dim', type=int, default=256, help='嵌入的水印有多长')
-    parser.add_argument('--scale', type=float, default=1, help="regularized loss前面的系数有多大")
+    parser.add_argument('--scale', type=float, default=0.1, help="regularized loss前面的系数有多大")
 
     args = parser.parse_args()
     return args
