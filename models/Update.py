@@ -661,8 +661,8 @@ class LocalUpdate(object):
 
     def validate(self,net):
         success_rate = -1
-        pred_b = get_layer_weights_and_predict(net,self.X.numpy())
-        success_rate = compute_BER(pred_b=pred_b,b=self.b.numpy())
+        pred_b = get_layer_weights_and_predict(net,self.X.cpu().numpy())
+        success_rate = compute_BER(pred_b=pred_b,b=self.b.cpu().numpy())
         return success_rate
 
 

@@ -304,8 +304,8 @@ def main(args,rd,seed):
 
 if __name__ == '__main__':
     args = args_parser()
-    args.use_watermark = False
-    main(args=args)
+    # args.use_watermark = False
+    # main(args=args)
 
     embed_dims = [64,128,192,256,320,384,448]
     fracs = [0.1,0.2,0.3]
