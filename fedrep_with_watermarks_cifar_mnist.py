@@ -176,12 +176,12 @@ def main(args,rd,seed):
             total_len += lens[idx]
 
             # zyb 保存head为numpy格式
-            if not os.path.exists('./save/heads'):
-                os.makedirs('./save/heads')
-            np.save('./save/heads/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(idx) +'weight.npy',w_local['fc3.weight'].numpy())
-            np.save('./save/heads/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(idx) +'bias.npy',w_local['fc3.bias'].numpy())
+            if not os.path.exists('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)):
+                os.makedirs('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim))
+            np.save('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(idx) +'_weight.npy',w_local['fc3.weight'].numpy())
+            np.save('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(idx) +'_bias.npy',w_local['fc3.bias'].numpy())
             # tyl：这里写的不太直观，解释一下
             if len(w_glob) == 0:
                 w_glob = copy.deepcopy(w_local)
@@ -260,9 +260,9 @@ def main(args,rd,seed):
                 accs10_glob += acc_test / 10
 
         if iter % args.save_every == args.save_every - 1:
-            if not os.path.exists("./save/glob_models"):
-                os.makedirs("./save/glob_models")
-            model_save_path = './save/glob_models/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            if not os.path.exists("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)):
+                os.makedirs("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim))
+            model_save_path = "./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) + '_iter' + str(iter) + '.pt'
             torch.save(net_glob.state_dict(), model_save_path)
 
@@ -304,5 +304,16 @@ def main(args,rd,seed):
 
 if __name__ == '__main__':
     args = args_parser()
-    for i in range(10):
-        main(args=args, rd=i, seed=i)
+    args.use_watermark = False
+    main(args=args)
+
+    embed_dims = [64,128,192,256,320,384,448]
+    fracs = [0.1,0.2,0.3]
+
+    args.use_watermark = True
+    for frac in fracs:
+        args.frac = frac
+        for embed_dim in embed_dims:
+            args.embed_dim = embed_dim
+            for i in range(10):
+                main(args=args, rd=i, seed=i)
