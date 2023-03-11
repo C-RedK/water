@@ -36,7 +36,7 @@ def get_layer_weights_and_predict(model, w):
     elif isinstance(model,dict):
         # 反正是在最后一层嵌入，写死算求
         p = model['fc3.weight']
-        p = p.view(1, -1).detach().numpy()
+        p = p.cpu().view(1, -1).detach().numpy()
     pred_bparam = np.dot(p, w)  # dot product np.dot是矩阵乘法运算
     # print(pred_bparam)
     pred_bparam = np.sign(pred_bparam)
