@@ -17,7 +17,7 @@ from torch import nn
 import os
 
 from utils.options import args_parser
-from utils.train_utils import get_data, get_model, read_data
+from utils.train_utils import get_data, get_model, read_data,getdata
 from models.Update import LocalUpdate
 from models.test import test_img_local_all
 from utils.watermark import get_X, get_b
@@ -44,9 +44,9 @@ def main(args,rd,seed):
     # Step2：客户数据集初始化
     lens = np.ones(args.num_users)
     if 'cifar' in args.dataset or args.dataset == 'mnist':
-        dataset_train, dataset_test, dict_users_train, dict_users_test = get_data(args)
-        for idx in dict_users_train.keys():
-            np.random.shuffle(dict_users_train[idx])
+        # ck 修改get_data函数
+        dataset_train, dataset_test, dict_users_train, dict_users_test = getdata(args)
+    
     else:
         raise Exception
 

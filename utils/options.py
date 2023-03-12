@@ -55,7 +55,8 @@ def args_parser():
 
     # other arguments
     parser.add_argument('--dataset', type=str, default='cifar10', help="name of dataset")
-    parser.add_argument('--iid', action='store_true', help='whether i.i.d or not')
+    #parser.add_argument('--iid', action='store_true', help='whether i.i.d or not')
+    parser.add_argument('--partition', type=str, default='homo', help='the data partitioning strategy')
     parser.add_argument('--num_classes', type=int, default=10, help="number of classes")
     parser.add_argument('--num_channels', type=int, default=3, help="number of channels of imges")
     parser.add_argument('--gpu', type=int, default=0, help="GPU ID, -1 for CPU")
@@ -64,6 +65,8 @@ def args_parser():
     parser.add_argument('--load_fed', type=str, default='n', help='define pretrained federated model path')
     parser.add_argument('--results_save', type=str, default='runA', help='define fed results save folder')
     parser.add_argument('--save_every', type=int, default=50, help='how often to save models')
+    parser.add_argument('--datadir', type=str, required=False, default="./data/", help="Data directory")
+    parser.add_argument('--beta', type=float, default=0.5, help='The parameter for the dirichlet distribution for data partitioning')
 
     # build watermark
     parser.add_argument('--use_watermark', type=bool, default=True, help="决定是否要用水印")

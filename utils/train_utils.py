@@ -1,11 +1,19 @@
 # Modified from: https://github.com/pliang279/LG-FedAvg/blob/master/utils/train_utils.py
 # credit goes to: Paul Pu Liang
 
-from torchvision import datasets, transforms
 from models.Nets import CNNCifar, CNNCifar100, RNNSent, MLP, CNN_FEMNIST,CNNMnist
 from utils.sampling import noniid
 import os
 import json
+import numpy as np
+import torch
+from torchvision import datasets, transforms
+from math import *
+import random
+from utils.utils import *
+from utils.datasets import *
+import numpy as np
+import torch
 
 trans_mnist = transforms.Compose([transforms.ToTensor(),
                                   transforms.Normalize((0.1307,), (0.3081,))])
@@ -26,7 +34,39 @@ trans_cifar100_val = transforms.Compose([transforms.ToTensor(),
                                          transforms.Normalize(mean=[0.507, 0.487, 0.441],
                                                               std=[0.267, 0.256, 0.276])])
 
+def getdata(args):
+    # 数据划分
+    seed = args.seed   
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    random.seed(seed)
+    
+    dataset = args.dataset
+    datadir = args.datadir
 
+    if dataset == 'mnist':
+        dataset_train = datasets.MNIST('data/mnist/', train=True, download=True, transform=trans_mnist)
+        dataset_test = datasets.MNIST('data/mnist/', train=False, download=True, transform=trans_mnist)
+        X_train, y_train, X_test, y_test= load_mnist_data(datadir)
+    elif dataset == 'cifar10':
+        dataset_train = datasets.CIFAR10('data/cifar10', train=True, download=True, transform=trans_cifar10_train)
+        dataset_test = datasets.CIFAR10('data/cifar10', train=False, download=True, transform=trans_cifar10_val)
+        X_train, y_train, X_test, y_test= load_cifar10_data(datadir)
+    elif dataset == 'cifar100':
+        dataset_train = datasets.CIFAR100('data/cifar100', train=True, download=True, transform=trans_cifar100_train)
+        dataset_test = datasets.CIFAR100('data/cifar100', train=False, download=True, transform=trans_cifar100_val)
+        X_train, y_train, X_test, y_test= load_cifar100_data(datadir)
+    else:
+        exit('Error: unrecognized dataset')
+    # sample users
+    # dict_users_train
+    dict_users_train,data_cls_counts= partition_data(dataset,y_train,args.partition,args.num_users,args.beta)
+    dict_users_test,data_cls_counts= partition_data(dataset,y_test,args.partition,args.num_users,args.beta)
+    
+    
+    return  dataset_train,dataset_test,dict_users_train,dict_users_test
+
+#ck 旧的get_data函数 后期处理
 def get_data(args):
     if args.dataset == 'mnist':
         dataset_train = datasets.MNIST('data/mnist/', train=True, download=True, transform=trans_mnist)
