@@ -56,7 +56,7 @@ def args_parser():
     # other arguments
     parser.add_argument('--dataset', type=str, default='cifar10', help="name of dataset")
     #parser.add_argument('--iid', action='store_true', help='whether i.i.d or not')
-    parser.add_argument('--partition', type=str, default='homo', help='the data partitioning strategy')
+    parser.add_argument('--partition', type=str, default='noniid-#label2', help='the data partitioning strategy')
     parser.add_argument('--num_classes', type=int, default=10, help="number of classes")
     parser.add_argument('--num_channels', type=int, default=3, help="number of channels of imges")
     parser.add_argument('--gpu', type=int, default=0, help="GPU ID, -1 for CPU")

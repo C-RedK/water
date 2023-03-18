@@ -1,72 +1,36 @@
 import numpy as np
 import torchvision.transforms as transforms
 import random
-from utils.datasets import MNIST_truncated, CIFAR10_truncated, CIFAR100_truncated, ImageFolder_custom, SVHN_custom, FashionMNIST_truncated, CustomTensorDataset, CelebA_custom, FEMNIST, Generated, genData
-import random
 
-
-def load_mnist_data(datadir):
-
-    transform = transforms.Compose([transforms.ToTensor()])
-
-    mnist_train_ds = MNIST_truncated(datadir, train=True, download=True, transform=transform)
-    mnist_test_ds = MNIST_truncated(datadir, train=False, download=True, transform=transform)
-
-    X_train, y_train = mnist_train_ds.data, mnist_train_ds.target
-    X_test, y_test = mnist_test_ds.data, mnist_test_ds.target
-
-    X_train = X_train.data.numpy()
-    y_train = y_train.data.numpy()
-    X_test = X_test.data.numpy()
-    y_test = y_test.data.numpy()
-
-    return (X_train, y_train, X_test, y_test)
-
-
-def load_cifar100_data(datadir):
-    transform = transforms.Compose([transforms.ToTensor()])
-
-    cifar100_train_ds = CIFAR100_truncated(datadir, train=True, download=True, transform=transform)
-    cifar100_test_ds = CIFAR100_truncated(datadir, train=False, download=True, transform=transform)
-
-    X_train, y_train = cifar100_train_ds.data, cifar100_train_ds.target
-    X_test, y_test = cifar100_test_ds.data, cifar100_test_ds.target
-
-    # y_train = y_train.numpy()
-    # y_test = y_test.numpy()
-
-    return (X_train, y_train, X_test, y_test)
-
-def load_cifar10_data(datadir):
-
-    transform = transforms.Compose([transforms.ToTensor()])
-
-    cifar10_train_ds = CIFAR10_truncated(datadir, train=True, download=True, transform=transform)
-    cifar10_test_ds = CIFAR10_truncated(datadir, train=False, download=True, transform=transform)
-
-    X_train, y_train = cifar10_train_ds.data, cifar10_train_ds.target
-    X_test, y_test = cifar10_test_ds.data, cifar10_test_ds.target
-
-    # y_train = y_train.numpy()
-    # y_test = y_test.numpy()
-
-    return (X_train, y_train, X_test, y_test)
-
-def partition_data(dataset,data_target,partition, n_parties, beta=0.4):
+def partition_data(dataset,train_label,test_label,partition, n_parties, beta=0.4):
     
-    y_train = data_target
-    # 标签,读取长度
-    n_train = y_train.shape[0]
+    # 获取数据数目
+    n_train = len(train_label)
+    n_test  = len(test_label)
+
+    train_label = np.array(train_label)
+    test_label  = np.array(test_label)
+
     #IID 设置
     if partition == "homo":
-        idxs = np.random.permutation(n_train)
-        batch_idxs = np.array_split(idxs, n_parties)
-        net_dataidx_map = {i: batch_idxs[i] for i in range(n_parties)}
+        # 根据标签数目随机出一个表示数据点的arr
+        idxs_train = np.random.permutation(n_train)
+        idxs_test  = np.random.permutation(n_test)
+        # 平均划分给每个client
+        batch_idxs_train = np.array_split(idxs_train, n_parties)
+        batch_idxs_test = np.array_split(idxs_test, n_parties)
+        # 分配
+        train_dataidx_map = {i: batch_idxs_train[i] for i in range(n_parties)}
+        test_dataidx_map  = {i: batch_idxs_test[i]  for i in range(n_parties)}
 
+    # Dirichlet 标签分布
     elif partition == "noniid-labeldir":
+        min_size_train = 0
+        min_size_test  = 0
         min_size = 0
         min_require_size = 10
         K = 10
+        # 数据集的标签种类
         if dataset in ('celeba', 'covtype', 'a9a', 'rcv1', 'SUSY'):
             K = 2
             # min_require_size = 100
@@ -75,38 +39,64 @@ def partition_data(dataset,data_target,partition, n_parties, beta=0.4):
         elif dataset == 'tinyimagenet':
             K = 200
 
-        N = y_train.shape[0]
-        #np.random.seed(2020)
-        net_dataidx_map = {}
 
-        while min_size < min_require_size:
-            idx_batch = [[] for _ in range(n_parties)]
-            for k in range(K):
-                idx_k = np.where(y_train == k)[0]
-                np.random.shuffle(idx_k)
+        train_dataidx_map = {}
+        test_dataidx_map = {}
+
+        # 分别对train/test划分
+        while min_size_train < min_require_size:
+           train_idx_batch = [[] for _ in range(n_parties)]
+           #每种标签 
+           for k in range(K):
+                #选出每种label的数据点
+                idx_k_train = np.where(train_label == k)[0]
+                np.random.shuffle(idx_k_train)
+                # dir分布，每个client分配到label的比例,每个client都是beta
                 proportions = np.random.dirichlet(np.repeat(beta, n_parties))
-                # logger.info("proportions1: ", proportions)
-                # logger.info("sum pro1:", np.sum(proportions))
-                ## Balance
-                proportions = np.array([p * (len(idx_j) < N / n_parties) for p, idx_j in zip(proportions, idx_batch)])
-                # logger.info("proportions2: ", proportions)
-                proportions = proportions / proportions.sum()
-                # logger.info("proportions3: ", proportions)
-                proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
-                # logger.info("proportions4: ", proportions)
-                idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(idx_batch, np.split(idx_k, proportions))]
-                min_size = min([len(idx_j) for idx_j in idx_batch])
-                # if K == 2 and n_parties <= 10:
-                #     if np.min(proportions) < 200:
-                #         min_size = 0
-                #         break
+                # 调整，调整每个客户端分配到标签数据集的比例，使得每个客户端的数据集大小都不超过n_train/n_parties 
+                # 超过的会变为0,正常的还是原来的分布系数     
+                p_train = np.array([p * (len(idx_j) < n_train / n_parties) for p, idx_j in zip(proportions, train_idx_batch)])
+                # 归一化为一个概率分布。
+                p_train = p_train / p_train.sum()
+                # 得到每个client按照dir分布划分的k标签资源数目
+                # 每个分布系数等于之前所有系数之和
+                p_train = (np.cumsum(p_train) * len(idx_k_train)).astype(int)[:-1]
+                # 将k的划分资源点加入到client总的划分。
+                train_idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(train_idx_batch, np.split(idx_k_train, p_train))]
+                # 选出最少的数据大小
+                min_size_train = min([len(idx_j) for idx_j in train_idx_batch])
 
+        while min_size_test < min_require_size:
+           test_idx_batch = [[] for _ in range(n_parties)]
+           #每种标签 
+           for k in range(K):
+                #选出每种label的数据点
+                idx_k_test  = np.where(test_label  == k)[0]
+                np.random.shuffle(idx_k_test)
+                # dir分布，每个client分配到label的比例,每个client都是beta
+                proportions = np.random.dirichlet(np.repeat(beta, n_parties))
+                # 调整，调整每个客户端分配到标签数据集的比例，使得每个客户端的数据集大小都不超过n_train/n_parties 
+                # 超过的会变为0,正常的还是原来的分布系数     
+                p_test  = np.array([p * (len(idx_j) < n_test / n_parties) for p, idx_j in zip(proportions, test_idx_batch)])
+                # 归一化为一个概率分布。
+                p_test  = p_test  / p_test.sum()
+                # 得到每个client按照dir分布划分的k标签资源数目
+                # 每个分布系数等于之前所有系数之和
+                p_test  = (np.cumsum(p_test) * len(idx_k_test)).astype(int)[:-1]
+                # 将k的划分资源点加入到client总的划分。
+                test_idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(test_idx_batch, np.split(idx_k_test, p_test))]
+                # 选出最少的数据大小
+                min_size_test  = min([len(idx_j) for idx_j in test_idx_batch])
 
         for j in range(n_parties):
-            np.random.shuffle(idx_batch[j])
-            net_dataidx_map[j] = idx_batch[j]
+            np.random.shuffle(train_idx_batch[j])
+            np.random.shuffle(test_idx_batch[j])
+            train_dataidx_map[j] = train_idx_batch[j]
+            test_dataidx_map[j] = test_idx_batch[j]
 
+    
     elif partition > "noniid-#label0" and partition <= "noniid-#label9":
+        # 获取每个client的划分标签数
         num = eval(partition[13:])
         if dataset in ('celeba', 'covtype', 'a9a', 'rcv1', 'SUSY'):
             num = 1
@@ -117,113 +107,94 @@ def partition_data(dataset,data_target,partition, n_parties, beta=0.4):
             K = 100
         elif dataset == "tinyimagenet":
             K = 200
+        # num = 10 时每个client分到十种标签数据
+        # Q: 对于K > 10 的怎么办？ 只使用十种吗
         if num == 10:
-            net_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
+            train_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
+            test_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
             for i in range(10):
-                idx_k = np.where(y_train==i)[0]
-                np.random.shuffle(idx_k)
-                split = np.array_split(idx_k,n_parties)
+                # 获取每种标签对应的数据点
+                idx_k_train = np.where(train_label==i)[0]
+                idx_k_test  = np.where(test_label==i)[0]
+                np.random.shuffle(idx_k_train)
+                np.random.shuffle(idx_k_test)
+                # 将每种标签代表的数据划分到每个client
+                split_train = np.array_split(idx_k_train,n_parties)
+                split_test = np.array_split(idx_k_test,n_parties)
+                # 按照client编号划分
                 for j in range(n_parties):
-                    net_dataidx_map[j]=np.append(net_dataidx_map[j],split[j])
+                    train_dataidx_map[j]=np.append(train_dataidx_map[j],split_train[j])
+                    test_dataidx_map[j] = np.append(test_dataidx_map[j],split_test[j])
+        # 少于10
         else:
+            # times 记录所有种类标签被分配的次数
             times=[0 for i in range(K)]
+            # contain 记录所有client分配label的情况
             contain=[]
+            # 对每个client划分不同的label
             for i in range(n_parties):
+                # 第一个标签是i%k
                 current=[i%K]
                 times[i%K]+=1
-                j=1
-                while (j<num):
+                # 已经选择的标签
+                selected_label=1
+                # 随机选择一个没有选过的标签加入，直到选择num个
+                while (selected_label<num):
                     ind=random.randint(0,K-1)
                     if (ind not in current):
-                        j=j+1
+                        selected_label=selected_label+1
                         current.append(ind)
                         times[ind]+=1
+                # 将第i个client选择的label加入
                 contain.append(current)
-            net_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
+
+            train_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
+            test_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
+
             for i in range(K):
-                idx_k = np.where(y_train==i)[0]
-                np.random.shuffle(idx_k)
-                split = np.array_split(idx_k,times[i])
+                idx_k_train = np.where(train_label==i)[0]
+                idx_k_test  = np.where(test_label==i)[0]
+                np.random.shuffle(idx_k_train)
+                np.random.shuffle(idx_k_test)
+                # 根据被client选择的次数划分
+                split_train = np.array_split(idx_k_train,times[i])
+                split_test  = np.array_split(idx_k_test,times[i])
                 ids=0
+                # 根据前面每个client分配的label划分数据
                 for j in range(n_parties):
                     if i in contain[j]:
-                        net_dataidx_map[j]=np.append(net_dataidx_map[j],split[ids])
+                        train_dataidx_map[j]=np.append(train_dataidx_map[j],split_train[ids])
+                        test_dataidx_map[j]=np.append(test_dataidx_map[j],split_test[ids])
                         ids+=1
 
+    # 数量偏移
     elif partition == "iid-diff-quantity":
-        idxs = np.random.permutation(n_train)
-        min_size = 0
-        while min_size < 10:
-            proportions = np.random.dirichlet(np.repeat(beta, n_parties))
-            proportions = proportions/proportions.sum()
-            min_size = np.min(proportions*len(idxs))
-        proportions = (np.cumsum(proportions)*len(idxs)).astype(int)[:-1]
-        batch_idxs = np.split(idxs,proportions)
-        net_dataidx_map = {i: batch_idxs[i] for i in range(n_parties)}
-        
-    elif partition == "mixed":
-        min_size = 0
-        min_require_size = 10
-        K = 10
-        if dataset in ('celeba', 'covtype', 'a9a', 'rcv1', 'SUSY'):
-            K = 2
-            # min_require_size = 100
+        # 随机生成数据点
+        train_idxs = np.random.permutation(n_train)
+        test_idxs = np.random.permutation(n_test)
+        train_min_size = 0
+        test_min_size = 0
+        # 每次生成随机分布，知道每个分布都大于10
+        # 分两次筛选，尽量保持最初状态，避免一部分划分过大
+        while train_min_size < 10:
+            # 这个生成分布式是随机的?
+            p_train = np.random.dirichlet(np.repeat(beta, n_parties))
+            p_train = p_train/p_train.sum()
+            train_min_size = np.min(p_train*len(train_idxs))
 
-        N = y_train.shape[0]
-        net_dataidx_map = {}
+        while test_min_size < 10:
+            # 这个生成分布式是随机的?
+            p_test = np.random.dirichlet(np.repeat(beta, n_parties))
+            p_test = p_test/p_test.sum()
+            test_min_size = np.min(p_test*len(test_idxs))
+        p_train = (np.cumsum(p_train)*len(train_idxs)).astype(int)[:-1]
+        p_test = (np.cumsum(p_test)*len(test_idxs)).astype(int)[:-1]
+        train_batch_idxs = np.split(train_idxs,p_train)
+        test_batch_idxs = np.split(test_idxs,p_test)
+        train_dataidx_map = {i: train_batch_idxs[i] for i in range(n_parties)}
+        test_dataidx_map = {i: test_batch_idxs[i] for i in range(n_parties)}
+    
+    return train_dataidx_map,test_dataidx_map
 
-        times=[1 for i in range(10)]
-        contain=[]
-        for i in range(n_parties):
-            current=[i%K]
-            j=1
-            while (j<2):
-                ind=random.randint(0,K-1)
-                if (ind not in current and times[ind]<2):
-                    j=j+1
-                    current.append(ind)
-                    times[ind]+=1
-            contain.append(current)
-        net_dataidx_map ={i:np.ndarray(0,dtype=np.int64) for i in range(n_parties)}
-        
-
-        min_size = 0
-        while min_size < 10:
-            proportions = np.random.dirichlet(np.repeat(beta, n_parties))
-            proportions = proportions/proportions.sum()
-            min_size = np.min(proportions*n_train)
-
-        for i in range(K):
-            idx_k = np.where(y_train==i)[0]
-            np.random.shuffle(idx_k)
-
-            proportions_k = np.random.dirichlet(np.repeat(beta, 2))
-            #proportions_k = np.ndarray(0,dtype=np.float64)
-            #for j in range(n_parties):
-            #    if i in contain[j]:
-            #        proportions_k=np.append(proportions_k ,proportions[j])
-
-            proportions_k = (np.cumsum(proportions_k)*len(idx_k)).astype(int)[:-1]
-
-            split = np.split(idx_k, proportions_k)
-            ids=0
-            for j in range(n_parties):
-                if i in contain[j]:
-                    net_dataidx_map[j]=np.append(net_dataidx_map[j],split[ids])
-                    ids+=1
-                           
-    traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
-    return (net_dataidx_map, traindata_cls_counts)
-
-def record_net_data_stats(y_train, net_dataidx_map):
-
-    net_cls_counts = {}
-
-    for net_i, dataidx in net_dataidx_map.items():
-        unq, unq_cnt = np.unique(y_train[dataidx], return_counts=True)
-        tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
-        net_cls_counts[net_i] = tmp
-
-    return net_cls_counts
 
 

@@ -37,26 +37,20 @@ def init_seed(seed):
 def main(args,rd,seed):
     # Step1:设置随机种子,保证结果可复现
     init_seed(seed=seed)
-
     # Step1：参数初始化
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
     # Step2：客户数据集初始化
     lens = np.ones(args.num_users)
-    if 'cifar' in args.dataset or args.dataset == 'mnist':
-        # ck 修改get_data函数
-        dataset_train, dataset_test, dict_users_train, dict_users_test = getdata(args)
-    
-    else:
-        raise Exception
-
+    # ck 修改get_data函数
+    dataset_train, dataset_test, dict_users_train, dict_users_test = getdata(args)
     # print("args.alg:{}".format(args.alg)) #tyl：和之前一样，统一打印需要观测的实验参数
     
     # Step3：模型初始化
     net_glob = get_model(args)
     net_glob.train()  # tyl:这个步骤原因？
     if args.load_fed != 'n': 
-        fed_model_path = './save/' + args.load_fed + '.pt'
+        fed_model_path = args.load_fed
         net_glob.load_state_dict(torch.load(fed_model_path))
 
     total_num_layers = len(net_glob.state_dict().keys())
@@ -128,6 +122,7 @@ def main(args,rd,seed):
     start = time.time()
     all_one_for_all_clients_rates = []
     for iter in range(args.epochs + 1):
+        # 放全局参数的总和
         w_glob = {}
         loss_locals = []
         m = max(int(args.frac * args.num_users), 1)
@@ -153,6 +148,7 @@ def main(args,rd,seed):
                 local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_tr],
                                     X=dict_X[idx], b=dict_b[idx])
 
+            # 初始化head 等于上一轮的head
             net_local = copy.deepcopy(net_glob)
             w_local = net_local.state_dict()
             # tyl：确保w_local中head部分发生变化
@@ -183,6 +179,9 @@ def main(args,rd,seed):
             np.save('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(idx) +'_bias.npy',w_local['fc3.bias'].numpy())
             # tyl：这里写的不太直观，解释一下
+            
+            # 更新w_glob和对应的w_locals
+            # 如果第一轮第一个client,直接赋值
             if len(w_glob) == 0:
                 w_glob = copy.deepcopy(w_local)
                 for k, key in enumerate(net_glob.state_dict().keys()):
@@ -190,10 +189,11 @@ def main(args,rd,seed):
                     # 为什么要这样赋值呢？为什么他不直接w_locals[idx] = w_local呢？
                     # 有一定道理的，确实确实，但也不是那么确实
                     w_locals[idx][key] = w_local[key]
+            # 其他情况,参数直接相加
             else:
                 for k, key in enumerate(net_glob.state_dict().keys()):
                     if key in w_glob_keys:
-                        w_glob[key] += w_local[key] * lens[idx]
+                        w_glob[key] += w_local[key] * lens[idx] # ck: 这个lens[idx] 不是1？
                     else:
                         w_glob[key] += w_local[key] * lens[idx]
                     w_locals[idx][key] = w_local[key]

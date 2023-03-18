@@ -24,6 +24,7 @@ def noniid(dataset, num_users, shard_per_user, num_classes, rand_set_all=[], tes
         # dataset.targets会返回所有的标签，一共60000个
         # 这里一通操作属实没看懂是在干什么
         label = torch.tensor(dataset.targets[i]).item()
+        # 记录每个标签的数据点
         if label < num_classes and label not in idxs_dict.keys():
             idxs_dict[label] = []
         if label < num_classes:
@@ -44,6 +45,7 @@ def noniid(dataset, num_users, shard_per_user, num_classes, rand_set_all=[], tes
     for label in idxs_dict.keys():
         x = idxs_dict[label]
         # 这个变量是看有没有会被剩下的，一般是没有
+        # 这个标签的数据够不够预设的数量
         num_leftover = len(x) % shard_per_class
         # 把剩下的标签记录一下，看来是没有，返回一个空的
         leftover = x[-num_leftover:] if num_leftover > 0 else []

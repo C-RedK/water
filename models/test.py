@@ -109,8 +109,10 @@ def test_img_local_all(net, args, dataset_test, dict_users_test,w_locals=None,w_
         if w_locals is not None:
             w_local = net_local.state_dict()
             for k in w_locals[idx].keys():
+                # 有表示层参数，且 k 不在表示层: 将w_local 对应的head层从w_locals载入
                 if w_glob_keys is not None and k not in w_glob_keys:
                     w_local[k] = w_locals[idx][k]
+                # 没有表示层参数
                 elif w_glob_keys is None:
                     w_local[k] = w_locals[idx][k]
             net_local.load_state_dict(w_local)
