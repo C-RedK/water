@@ -39,7 +39,7 @@ def main(args,rd,seed):
     init_seed(seed=seed)
     # Step1：参数初始化
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
-
+    print(args.device)
     # Step2：客户数据集初始化
     lens = np.ones(args.num_users)
     # ck 修改get_data函数
@@ -48,6 +48,7 @@ def main(args,rd,seed):
     
     # Step3：模型初始化
     net_glob = get_model(args)
+    net_glob.to(args.device)
     net_glob.train()  # tyl:这个步骤原因？
     if args.load_fed != 'n': 
         fed_model_path = args.load_fed
@@ -305,7 +306,7 @@ def main(args,rd,seed):
 if __name__ == '__main__':
     args = args_parser()
 
-    embed_dims = [64,128,192,256,320,384,448]
+    embed_dims = [256,320,384,448]
     fracs = [0.1,0.2,0.3]
 
     args.use_watermark = True
