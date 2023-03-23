@@ -15,34 +15,6 @@ from utils.watermark import get_layer_weights_and_predict,compute_BER
 from models.test import test_img_local_all
 
 
-def pruning_resnet(model, pruning_perc):
-
-    if pruning_perc == 0:
-        return
-    allweights = []
-    for p in model.parameters():
-        allweights += p.data.cpu().abs().numpy().flatten().tolist()
-    
-    allweights = np.array(allweights)
-    threshold = np.percentile(allweights, pruning_perc)
-    for p in model.parameters():
-        mask = p.abs() > threshold
-        p.data.mul_(mask.float())
-
-def prune_linear_layer(layer, pruning_method, amount):
-    """
-    对给定的linear层进行剪枝
-    :param layer: 待剪枝的linear层
-    :param pruning_method: 剪枝方法
-    :param amount: 剪枝比例
-    """
-    # 按照指定的方法进行剪枝
-    pruning_method.apply(layer, 'weight', amount)
-    # 剪枝永久生效
-    prune.remove(layer, 'weight')
-
-  
-
 # 计算水印准确度
 def validate(net,X,b):
     X = torch.tensor(X, dtype=torch.float32).to(args.device)
@@ -86,39 +58,24 @@ def main(args,loadpath):
             for key in model.state_dict().keys():
                w_local_dict[key] = model.state_dict()[key]
             # 加载fc3的参数 转换为torch.tensor
-            w_local_dict['fc3.weight'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            w_local_dict['fc3.weight'] = torch.from_numpy(np.load('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(i) +'_weight.npy'))
-            w_local_dict['fc3.bias'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            w_local_dict['fc3.bias'] = torch.from_numpy(np.load('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(i) +'_bias.npy'))
 
             w_locals[i] = w_local_dict
         
-        #对每个clinet进行剪枝
-        for i in range(args.num_users):
-            pruned_model = copy.deepcopy(model)
-            pruned_model.load_state_dict(w_locals[i])
-            #pruning_resnet(pruned_model.fc3, perc)
-            amount = perc/100
-            #prune.random_unstructured(pruned_model.fc3, name="weight", amount=amount)
-            #prune.l1_unstructured(pruned_model.fc3, name="weight", amount=amount)
-            #prune.ln_structured(pruned_model.fc3, name="weight", amount=amount, n=2, dim=0)
-            prune.remove(pruned_model.fc3, 'weight')
-            w_locals[i] = pruned_model.state_dict()
-      
-        #剪枝后模型的性能
+ 
         indd = None # 特定数据集的参数
-        # 表示层
-        #w_glob_keys = [model.weight_keys[i] for i in [0, 1, 3, 4]]
-        #w_glob_keys = list(itertools.chain.from_iterable(w_glob_keys))
         
+        # 模型测试
         #这里计算的是对每个client的平均acc loss
         #不加w_glob_keys的话，会计算所有的参数的acc loss 
         acc_test, loss_test = test_img_local_all(model, args, dataset_test, dict_users_test,
                                                  w_locals=w_locals,indd=indd,
                                                  dataset_train=dataset_train, dict_users_train=dict_users_train,
                                                  return_all=False)
-        #剪枝后水印检测准确率: 对每个client的水印进行检测,计算一个平均值
-        #考虑到，有的client可能一次也没有参与过训练，model中不存在水印，会影响精确度
+        # 水印检测
         all_success_rate = []
         for i in range(args.num_users):
          # model.load_state_dict(w_locals[i])
@@ -146,4 +103,4 @@ if __name__ == '__main__':
 
     args = args_parser()
     args.embed_dim = 64
-    main(args,loadpath="save\glob_models/0.1/64accs_fedrep_cifar10_100_2_iter49.pt")
+    main(args,loadpath="")

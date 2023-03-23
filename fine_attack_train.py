@@ -18,7 +18,7 @@ import os
 
 from utils.options import args_parser
 from utils.train_utils import get_data, get_model, read_data,getdata
-from models.Update import LocalUpdate
+from models.Update import LocalUpdate_fine
 from models.test import test_img_local_all
 from utils.watermark import get_X, get_b
 from torch.backends import cudnn
@@ -142,10 +142,10 @@ def main(args,rd,seed):
             # tyl：这个if判断感觉没用啊，而且这个类对象不应该只需要每个client执行一次吗？
             if args.epochs == iter:
                 # 都是500，没啥影响
-                local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_ft],
+                local = LocalUpdate_fine(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_ft],
                                     X=dict_X[idx], b=dict_b[idx])
             else:
-                local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_tr],
+                local = LocalUpdate_fine(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_tr],
                                     X=dict_X[idx], b=dict_b[idx])
 
             # 初始化head 等于上一轮的head
@@ -172,11 +172,11 @@ def main(args,rd,seed):
             total_len += lens[idx]
 
             # zyb 保存head为numpy格式
-            if not os.path.exists('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)):
-                os.makedirs('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim))
-            np.save('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            if not os.path.exists('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)):
+                os.makedirs('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim))
+            np.save('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(idx) +'_weight.npy',w_local['fc3.weight'].numpy())
-            np.save('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            np.save('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(idx) +'_bias.npy',w_local['fc3.bias'].numpy())
             # tyl：这里写的不太直观，解释一下
             
@@ -260,9 +260,9 @@ def main(args,rd,seed):
                 accs10_glob += acc_test / 10
 
         if iter % args.save_every == args.save_every - 1:
-            if not os.path.exists("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)):
-                os.makedirs("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim))
-            model_save_path = "./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            if not os.path.exists("./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)):
+                os.makedirs("./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim))
+            model_save_path = "./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) + '_iter' + str(iter) + '.pt'
             torch.save(net_glob.state_dict(), model_save_path)
 
@@ -274,7 +274,7 @@ def main(args,rd,seed):
     print(times)
     print(accs)
 
-    accs_dir = './save/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+    accs_dir = './save_fine/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
         args.shard_per_user) + str(args.use_watermark) +str(args.embed_dim)+str(args.frac) +  '.xlsx'
     if not os.path.exists(accs_dir):
         pd.DataFrame().to_excel(accs_dir)
@@ -283,7 +283,7 @@ def main(args,rd,seed):
     df['acc_seed{}'.format(rd)] = accs
     df.to_excel(accs_dir, index=False)
 
-    succ_rates_dir = './save/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
+    succ_rates_dir = './save_fine/success_rates' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
         args.shard_per_user) + str(args.use_watermark) +str(args.embed_dim)+str(args.frac) + '.xlsx'
     if not os.path.exists(succ_rates_dir):
         pd.DataFrame().to_excel(succ_rates_dir)
@@ -294,7 +294,7 @@ def main(args,rd,seed):
 
     # 热力图的数据
     if args.use_watermark:
-        all_detect_all_dir = './save/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
+        all_detect_all_dir = './save_fine/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
             args.shard_per_user) + str(args.use_watermark) + str(args.embed_dim)+str(args.frac) + '.xlsx'
         
         all_one_for_all_clients_rates = np.array(all_one_for_all_clients_rates)
@@ -303,8 +303,8 @@ def main(args,rd,seed):
         df.to_excel(all_detect_all_dir)
 
 if __name__ == '__main__':
+    
     args = args_parser()
-
     embed_dims = [64,128,192,256,320,384,448]
     fracs = [0.1,0.2,0.3]
 
@@ -314,3 +314,4 @@ if __name__ == '__main__':
         for embed_dim in embed_dims:
             args.embed_dim = embed_dim
             main(args=args, rd=args.seed, seed=args.seed)
+

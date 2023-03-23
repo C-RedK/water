@@ -665,6 +665,120 @@ class LocalUpdate(object):
         success_rate = compute_BER(pred_b=pred_b,b=self.b.cpu().numpy())
         return success_rate
 
+# Generic local update class, implements local updates for FedRep, FedPer, LG-FedAvg, FedAvg, FedProx
+class LocalUpdate_fine(object):
+    def __init__(self, args, dataset=None, idxs=None, indd=None, X=None, b=None):
+        self.args = args
+        self.loss_func = nn.CrossEntropyLoss()
+        if 'femnist' in args.dataset or 'sent140' in args.dataset:
+            self.ldr_train = DataLoader(DatasetSplit(dataset, np.ones(len(dataset['x'])), name=self.args.dataset),
+                                        batch_size=self.args.local_bs, shuffle=True)
+        else:
+            self.ldr_train = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
+
+        if 'sent140' in self.args.dataset and indd == None:
+            VOCAB_DIR = 'models/embs.json'
+            _, self.indd, vocab = get_word_emb_arr(VOCAB_DIR)
+            self.vocab_size = len(vocab)
+        elif indd is not None:
+            self.indd = indd
+        else:
+            self.indd = None
+
+        self.dataset = dataset
+        self.idxs = idxs
+
+        self.X = None
+        self.b = None
+        if args.use_watermark:
+            self.X = torch.tensor(X, dtype=torch.float32).to(self.args.device)
+            self.b = torch.tensor(b, dtype=torch.float32).to(self.args.device)
+
+    def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.01, args=None, net_glob=None):
+        bias_p = []
+        weight_p = []
+        # named_parameters()
+        for name, p in net.named_parameters():
+            if 'bias' in name:
+                bias_p += [p]
+            else:
+                weight_p += [p]
+        optimizer = torch.optim.SGD(
+            [
+                {'params': weight_p, 'weight_decay': 0.0001},
+                {'params': bias_p, 'weight_decay': 0}
+            ],
+            lr=lr, momentum=0.5
+        )
+        # 设置中local_ep = 5
+        # 设置中local_rep_ep = 1
+        local_eps = self.args.local_ep
+        if last:
+            if self.args.alg == 'fedavg' or self.args.alg == 'prox':
+                local_eps = 10
+                if 'cifar' in self.args.dataset:
+                    w_glob_keys = [net.weight_keys[i] for i in [0, 1, 3, 4]]
+                elif 'mnist' in args.dataset and args.model == 'cnn':
+                    w_glob_keys = [net_glob.weight_keys[i] for i in [0, 1, 3, 4]]
+            else:
+                local_eps = max(10, local_eps - self.args.local_rep_ep)
+
+        head_eps = local_eps - self.args.local_rep_ep
+        epoch_loss = []
+        num_updates = 0
+
+        for iter in range(local_eps):
+            done = False
+
+            # for FedRep, first do local epochs for the head
+            if (iter < head_eps and self.args.alg == 'fedrep') or last:
+                for name, param in net.named_parameters():
+                    if name in w_glob_keys:
+                        param.requires_grad = False
+                    else:
+                        param.requires_grad = True
+
+            # then do local epochs for the representation
+            elif iter == head_eps and self.args.alg == 'fedrep' and not last:
+                for name, param in net.named_parameters():
+                    if name in w_glob_keys:
+                        param.requires_grad = True
+                    else:
+                        param.requires_grad = False
+
+            # all other methods update all parameters simultaneously
+            elif self.args.alg != 'fedrep':
+                for name, param in net.named_parameters():
+                    param.requires_grad = True
+
+            batch_loss = []
+            for batch_idx, (images, labels) in enumerate(self.ldr_train):
+
+                images, labels = images.to(self.args.device), labels.to(self.args.device)
+                net.zero_grad()
+                log_probs = net(images)
+                loss = self.loss_func(log_probs, labels)
+                loss.backward()
+                optimizer.step()
+                num_updates += 1
+                batch_loss.append(loss.item())
+
+                if num_updates == self.args.local_updates:
+                    done = True
+                    break
+            epoch_loss.append(sum(batch_loss) / len(batch_loss))
+            if done:
+                break
+
+            epoch_loss.append(sum(batch_loss) / len(batch_loss))
+
+        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), self.indd
+
+    def validate(self,net):
+        success_rate = -1
+        pred_b = get_layer_weights_and_predict(net,self.X.cpu().numpy())
+        success_rate = compute_BER(pred_b=pred_b,b=self.b.cpu().numpy())
+        return success_rate
 
 class LocalUpdateMTL(object):
     def __init__(self, args, dataset=None, idxs=None, indd=None):
