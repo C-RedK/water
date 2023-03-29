@@ -638,8 +638,10 @@ class LocalUpdate(object):
                 # 水印部分----------------------------------------------------------------------------------
                 regularized_loss = 0
                 if args.use_watermark:
+                    # 得到参数 转化为一维向量
                     para = net.params()
                     y = para.view(1, -1)
+                    # 计算损失
                     regularized_loss = args.scale * torch.sum(
                         F.binary_cross_entropy(input=torch.sigmoid(torch.matmul(y, self.X)), target=self.b))
                 (loss + regularized_loss).backward()

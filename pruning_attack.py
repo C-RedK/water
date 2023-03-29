@@ -1,5 +1,6 @@
 import copy
 import itertools
+import os
 import random
 import time
 import numpy as np
@@ -87,9 +88,9 @@ def main(args,loadpath):
                w_local_dict[key] = model.state_dict()[key]
             # 加载fc3的参数 转换为torch.tensor
             w_local_dict['fc3.weight'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(i) +'_weight.npy'))
+                args.shard_per_user) +'_'+str(i) +'_'+str(args.epochs)+'_weight.npy'))
             w_local_dict['fc3.bias'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(i) +'_bias.npy'))
+                args.shard_per_user) +'_'+str(i) +'_'+str(args.epochs)+'_bias.npy'))
 
             w_locals[i] = w_local_dict
         
@@ -97,10 +98,10 @@ def main(args,loadpath):
         for i in range(args.num_users):
             pruned_model = copy.deepcopy(model)
             pruned_model.load_state_dict(w_locals[i])
-            #pruning_resnet(pruned_model.fc3, perc)
+            #pruning_resnet(pruned_model, perc)
             amount = perc/100
             #prune.random_unstructured(pruned_model.fc3, name="weight", amount=amount)
-            #prune.l1_unstructured(pruned_model.fc3, name="weight", amount=amount)
+            prune.l1_unstructured(pruned_model.fc3, name="weight", amount=amount)
             #prune.ln_structured(pruned_model.fc3, name="weight", amount=amount, n=2, dim=0)
             prune.remove(pruned_model.fc3, 'weight')
             w_locals[i] = pruned_model.state_dict()
@@ -135,15 +136,23 @@ def main(args,loadpath):
         res['acc_model']     = acc_test
         print('prec: {:3d}, acc_watermark: {: 3f}, acc_model: {: 3f}'.format(perc,acc_watermark,acc_test))
         prunedf.append(res)
-
-'''
-    dirname = f'logs/pruning_attack/{loadpath.split("/")[1]}/{loadpath.split("/")[2]}'
-    os.makedirs(dirname, exist_ok=True)
-    histdf = pd.DataFrame(prunedf)
-    histdf.to_csv(f'{dirname}/history-{args.dataset}.csv')
-'''
+    # 保存到csv文件,文件名为：模型名+数据集名+用户数+每个用户的数据量+epoch+剪枝率
+    #如果没有这个文件，就创建一个
+    if not os.path.exists('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)):
+        os.makedirs('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim))
+    pd.DataFrame(prunedf).to_csv('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(args.epochs)+'_'+str(args.perc)+'.csv')
+    
 if __name__ == '__main__':
 
-    args = args_parser()
-    args.embed_dim = 64
-    main(args,loadpath="save\glob_models/0.1/64accs_fedrep_cifar10_100_2_iter49.pt")
+   args = args_parser()
+   emds = [8,16,32,64,128,256,512]
+   for emd in emds:
+        args.embed_dim = emd
+        args.epoch = 50
+        main(args,loadpath='./save/model/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(args.epochs)+'.pt')
+        args.epoch = 100
+        main(args,loadpath='./save/model/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(args.epochs)+'.pt')
+

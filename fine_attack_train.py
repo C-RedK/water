@@ -34,7 +34,7 @@ def init_seed(seed):
     torch.cuda.manual_seed_all(seed=seed)
 
 
-def main(args,rd,seed):
+def main(args,rd,seed,path):
     # Step1:设置随机种子,保证结果可复现
     init_seed(seed=seed)
     # Step1：参数初始化
@@ -48,10 +48,9 @@ def main(args,rd,seed):
     
     # Step3：模型初始化
     net_glob = get_model(args)
-    net_glob.train()  # tyl:这个步骤原因？
-    if args.load_fed != 'n': 
-        fed_model_path = args.load_fed
-        net_glob.load_state_dict(torch.load(fed_model_path))
+    net_glob.train()  
+    #加载被攻击的模型
+    net_glob.load_state_dict(torch.load(path))
 
     total_num_layers = len(net_glob.state_dict().keys())
     print('net_glob.state_dict().keys():')
@@ -172,12 +171,12 @@ def main(args,rd,seed):
             total_len += lens[idx]
 
             # zyb 保存head为numpy格式
-            if not os.path.exists('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)):
-                os.makedirs('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim))
+            if not os.path.exists('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+str(args.epochs)):
+                os.makedirs('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+str(args.epochs))
             np.save('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(idx) +'_weight.npy',w_local['fc3.weight'].numpy())
+                args.shard_per_user) +'_'+str(idx) + '_'+str(args.epochs)+'_weight.npy',w_local['fc3.weight'].cpu().numpy())
             np.save('./save_fine/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(idx) +'_bias.npy',w_local['fc3.bias'].numpy())
+                args.shard_per_user) +'_'+str(idx) +'_'+str(args.epochs)+'_bias.npy',w_local['fc3.bias'].cpu().numpy())
             # tyl：这里写的不太直观，解释一下
             
             # 更新w_glob和对应的w_locals
@@ -262,7 +261,7 @@ def main(args,rd,seed):
         if iter % args.save_every == args.save_every - 1:
             if not os.path.exists("./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)):
                 os.makedirs("./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim))
-            model_save_path = "./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+            model_save_path = "./save_fine/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) + '_iter' + str(iter) + '.pt'
             torch.save(net_glob.state_dict(), model_save_path)
 
@@ -273,7 +272,8 @@ def main(args,rd,seed):
     print(end - start)
     print(times)
     print(accs)
-
+    
+    '''
     accs_dir = './save_fine/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
         args.shard_per_user) + str(args.use_watermark) +str(args.embed_dim)+str(args.frac) +  '.xlsx'
     if not os.path.exists(accs_dir):
@@ -291,7 +291,8 @@ def main(args,rd,seed):
     df = pd.read_excel(succ_rates_dir)
     df['success_rates_seed{}'.format(rd)] = success_rates
     df.to_excel(succ_rates_dir, index=False)
-
+    
+    '''
     # 热力图的数据
     if args.use_watermark:
         all_detect_all_dir = './save_fine/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
@@ -306,12 +307,10 @@ if __name__ == '__main__':
     
     args = args_parser()
     embed_dims = [64,128,192,256,320,384,448]
-    fracs = [0.1,0.2,0.3]
-
-    args.use_watermark = True
-    for frac in fracs:
-        args.frac = frac
-        for embed_dim in embed_dims:
-            args.embed_dim = embed_dim
-            main(args=args, rd=args.seed, seed=args.seed)
+    
+    for embed_dim in embed_dims:
+        args.embed_dim = embed_dim
+        path = "./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) + '_iter' + str(iter) + '.pt'
+        main(args=args, rd=args.seed, seed=args.seed,path=path)
 

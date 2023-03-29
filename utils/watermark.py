@@ -28,7 +28,7 @@ def get_b(embed_dim, num_users, use_watermark=False):
         dict_b[i] = (np.sign(dict_b[i])+1) / 2
     return dict_b
 
-
+#
 def get_layer_weights_and_predict(model, w):
     if isinstance(model,nn.Module):
         p = model.params()
@@ -43,7 +43,7 @@ def get_layer_weights_and_predict(model, w):
     pred_bparam = (pred_bparam + 1) / 2
     return pred_bparam
 
-
+# 计算正确的比特数
 def compute_BER(pred_b, b):
     correct_bit = np.logical_not(np.logical_xor(pred_b, b))
     correct_bit_num = correct_bit.sum()
