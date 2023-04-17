@@ -10,6 +10,8 @@
 
 import copy
 import itertools
+from matplotlib import pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 import torch
@@ -106,8 +108,8 @@ def main(args,seed):
         # 最后一轮训练慢的原因是 最后一轮选择了全部客户端进行训练，所以才会这么慢
         # 原本可能选十几二十个，但是现在是所有的都他妈的要来训练，自然就满了
         # tyl：可以考虑最后一轮正常还是采样训练，多加一轮进行测试精度和测试水印（这样合理一点！）     
-        #if iter == args.epochs:
-        #    m = args.num_users
+        if iter == args.epochs:
+            m = args.num_users
 
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         idxs_users.sort()
@@ -143,12 +145,13 @@ def main(args,seed):
                                                             w_glob_keys=layer_base,
                                                             lr=args.lr, last=last, args=args, net_glob=model_glob)
             # zyb：分离水印嵌入和验证过程
-            success_rate = client.validate(net=model_client.to(args.device))
-            success_rates.append(success_rate)
+            if args.use_watermark: 
+             success_rate = client.validate(net=model_client.to(args.device))
+             success_rates.append(success_rate)
 
             loss_locals.append(copy.deepcopy(loss))
             total_len += lens[idx]
-
+            
             # zyb 保存head为numpy格式
             if not os.path.exists('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+str(args.epochs)):
                 os.makedirs('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+str(args.epochs))
@@ -173,11 +176,11 @@ def main(args,seed):
 
             times_in.append(time.time() - start_in)
 
-        # zyb:在最后一轮，所有人都验证所有人的水印，得出可以画热力图的数据
-        if last and args.use_watermark:
-            one_for_all_clients_rates = []
-            for i in range(args.num_users):
-                one_for_all_clients_rates.append(client.validate(net=model_clients[i]))
+            # zyb:在最后一轮，所有人都验证所有人的水印，得出可以画热力图的数据
+            if last and args.use_watermark:
+                one_for_all_clients_rates = []
+                for i in range(args.num_users):
+                    one_for_all_clients_rates.append(client.validate(net=model_clients[i]))
                 all_one_for_all_clients_rates.append(one_for_all_clients_rates)             
         
         # tyl:采样客户训练完毕   
@@ -239,7 +242,7 @@ def main(args,seed):
             if not os.path.exists("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)):
                 os.makedirs("./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim))
             model_save_path = "./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) + '_iter' + str(iter+1) + '.pt'
+                args.shard_per_user) + '_iter'+ str(args.use_watermark) + str(iter+1) + '.pt'
             torch.save(model_glob.state_dict(), model_save_path)
 
     print('Average accuracy final 10 rounds: {}'.format(accs10))
@@ -250,9 +253,9 @@ def main(args,seed):
     print(times)
     print(accs)
 
-    accs_dir = './save/accs/'
-    accs_csv = './save/accs/accs_' + args.dataset + '_' + str(args.num_users) + '_' +  str(
-        args.use_watermark)+'_' +str(args.embed_dim) + '_' + str(args.epochs)+'.csv'
+    accs_dir = './save/accs/' + str(args.epochs)+'/'
+    accs_csv = './save/accs/'+str(args.epochs)+'/accs_' + args.dataset + '_' + str(args.num_users) + '_' +  str(
+        args.use_watermark)+'_' +str(args.embed_dim) +'.csv'
     if not os.path.exists(accs_dir):
         os.makedirs(accs_dir)
     accs = np.array(accs)
@@ -260,20 +263,83 @@ def main(args,seed):
     df.to_csv(accs_csv, index=False)
     
     # 热力图的数据
+    # 和上面一样保存到csv文件中
     if args.use_watermark:
-        all_detect_all_dir = './save/water_acc/all_detect_all_rate' + args.alg + '_' + args.dataset + str(args.num_users) + '_' + str(
-            args.shard_per_user) + str(args.use_watermark) + str(args.embed_dim)+str(args.frac) + '.xlsx'
-
+        if not os.path.exists('./save/water_acc/'):
+            os.makedirs('./save/water_acc/')
+        all_detect_all_dir = './save/water_acc/all_detect_all_rate_' + args.alg + '_' + args.dataset + '_'+str(args.num_users) + '_' + str(
+            args.shard_per_user) + '_'+ str(args.use_watermark) + '_'+str(args.embed_dim)+'_'+str(args.frac) + '.xlsx'
         all_one_for_all_clients_rates = np.array(all_one_for_all_clients_rates)
         all_one_for_all_clients_rates = np.transpose(all_one_for_all_clients_rates)
         df = pd.DataFrame(all_one_for_all_clients_rates)
         df.to_excel(all_detect_all_dir)
 
+# 绘图函数,绘制一个多折线图，每个折线代表一个embed_dim的accs，x轴为round，y轴为accs
+# 只绘制100轮的accs
+def plot_accs(args,embed_dims,epochs=100):
+    if args.epochs != 100:
+        return
+    # 从csv文件中读取数据round和accs
+    for dim in embed_dims:
+        args.use_watermark = True
+        if dim == 0:
+            args.use_watermark = False
+        accs_csv = './save/accs/'+str(epochs)+'/accs_' + args.dataset + '_' + str(args.num_users) + '_' +  str(
+            args.use_watermark)+'_' +str(dim) +'.csv'
+        df = pd.read_csv(accs_csv)
+        round = df['round']
+        accs = df['acc']
+        plt.plot(round,accs,label='embed_dim='+str(dim))
+    
+    plt.xlabel('round')
+    plt.ylabel('accs')
+    plt.title('accs of different embed_dim')
+    plt.legend()
+    #plt.show()
+
+    #保存图片
+    if not os.path.exists('./save/pics'):
+        os.makedirs('./save/pics')
+    plt.savefig('./save/pics/accs of different embed_dim.png')
+
+#绘制热力图
+def plot_heatmap(args,embed_dims,epochs=100):
+    if args.use_watermark is False :
+        return
+    for dim in embed_dims:
+       if dim == 0:
+           continue
+       all_detect_all_dir = './save/water_acc/all_detect_all_rate_' + args.alg + '_' + args.dataset + '_'+str(args.num_users) + '_' + str(
+            args.shard_per_user) + '_'+ str(args.use_watermark) + '_'+str(dim)+'_'+str(args.frac)+ '.xlsx'
+       df = pd.read_excel(all_detect_all_dir)
+       hm = sns.heatmap(df, vmin=-1,vmax=1, cmap='RdBu_r', annot_kws={'size': 8})
+       # 设置x轴和y轴的label
+       hm.set(xlabel='client', ylabel='client')
+       # 设置标题
+       hm.set_title('heatmap of {} in 100 epochs'.format(dim))
+       # 保存图片
+       if not os.path.exists('./save/pics'):
+            os.makedirs('./save/pics')
+       plt.savefig('./save/pics/heatmap of {} in 100 epochs.png'.format(dim))
+
+
+
+
+
 if __name__ == '__main__':
 
     args = args_parser()
-    embed_dims = [8,16,32,64,128,256,512]
+    embed_dims = [0,8,16,32,64,128,256,512]
     args.use_watermark = True
+    args.epochs = 100
     for embed_dim in embed_dims:
+        args.use_watermark = True
+        if embed_dim == 0:
+            args.use_watermark = False
         args.embed_dim = embed_dim
         main(args=args,seed=args.seed)
+
+
+    plot_accs(args,embed_dims)
+    plot_heatmap(args,embed_dims)
+    

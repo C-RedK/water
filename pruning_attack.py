@@ -1,12 +1,9 @@
 import copy
-import itertools
 import os
 import random
-import time
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 import torch.nn.utils.prune as prune
 from utils.train_utils import  get_model,getdata
 from utils.options import args_parser
@@ -45,7 +42,7 @@ def prune_linear_layer(layer, pruning_method, amount):
   
 
 # 计算水印准确度
-def validate(net,X,b):
+def validate(args,net,X,b):
     X = torch.tensor(X, dtype=torch.float32).to(args.device)
     b = torch.tensor(b, dtype=torch.float32).to(args.device)
     success_rate = -1
@@ -74,36 +71,35 @@ def main(args,loadpath):
     # build watermark----------------------------------------------------------------------------------------------
     
     # 加载要测试的模型参数
-    sd = torch.load(loadpath)
+    model_state = torch.load(loadpath)
     prunedf = []
-    res = {}
 
     for perc in [0, 10, 20, 30, 40, 50, 60, 70, 80, 82,84,86,88,90]:
         # 加载模型
-        model.load_state_dict(sd)
+        model.load_state_dict(model_state)
         w_locals = {}
+        res = {}
         for i in range(args.num_users):
-            w_local_dict = {}
-            for key in model.state_dict().keys():
-               w_local_dict[key] = model.state_dict()[key]
+          w_local_dict = {}
+          for key in model.state_dict().keys():
+            w_local_dict[key] = model.state_dict()[key]
             # 加载fc3的参数 转换为torch.tensor
             w_local_dict['fc3.weight'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(i) +'_'+str(args.epochs)+'_weight.npy'))
             w_local_dict['fc3.bias'] = torch.from_numpy(np.load('./save/heads/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
                 args.shard_per_user) +'_'+str(i) +'_'+str(args.epochs)+'_bias.npy'))
-
             w_locals[i] = w_local_dict
         
         #对每个clinet进行剪枝
         for i in range(args.num_users):
             pruned_model = copy.deepcopy(model)
             pruned_model.load_state_dict(w_locals[i])
-            #pruning_resnet(pruned_model, perc)
-            amount = perc/100
+            pruning_resnet(pruned_model.fc3.weight, perc)
+            #amount = perc/100
             #prune.random_unstructured(pruned_model.fc3, name="weight", amount=amount)
-            prune.l1_unstructured(pruned_model.fc3, name="weight", amount=amount)
+            #prune.l1_unstructured(pruned_model.fc3, name="weight", amount=amount)
             #prune.ln_structured(pruned_model.fc3, name="weight", amount=amount, n=2, dim=0)
-            prune.remove(pruned_model.fc3, 'weight')
+            #prune.remove(pruned_model.fc3, 'weight')
             w_locals[i] = pruned_model.state_dict()
       
         #剪枝后模型的性能
@@ -125,8 +121,9 @@ def main(args,loadpath):
          # model.load_state_dict(w_locals[i])
           w_model = copy.deepcopy(model)
           w_model.load_state_dict(w_locals[i])
-          success_rate = validate(net=w_model.to(args.device),X=dict_X[i],b=dict_b[i])
-          all_success_rate.append(success_rate)
+          if args.use_watermark:
+            success_rate = validate(args,net=w_model.to(args.device),X=dict_X[i],b=dict_b[i])
+            all_success_rate.append(success_rate)
           #print(success_rate)
 
         acc_watermark = sum(all_success_rate) / args.num_users
@@ -140,19 +137,27 @@ def main(args,loadpath):
     #如果没有这个文件，就创建一个
     if not os.path.exists('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)):
         os.makedirs('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim))
-    pd.DataFrame(prunedf).to_csv('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(args.epochs)+'_'+str(args.perc)+'.csv')
-    
+    df = pd.DataFrame({'perc': [i ['perc'] for i in prunedf],'acc_watermark': [
+         i ['acc_watermark'] for i in prunedf],'acc_model': [i ['acc_model'] for i in prunedf]})
+    #pd.DataFrame(prunedf).to_csv('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+    #           args.shard_per_user) +'_'+str(args.epochs)+'_'+str(args.perc)+'.csv')
+    df.to_csv('./save/prunedf/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) +'_'+str(args.epochs)+'_'+str(perc)+'.csv')
+
+
 if __name__ == '__main__':
 
    args = args_parser()
-   emds = [8,16,32,64,128,256,512]
+   emds = [0,8,16,32,64,128,256,512]
    for emd in emds:
         args.embed_dim = emd
-        args.epoch = 50
-        main(args,loadpath='./save/model/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(args.epochs)+'.pt')
+        
+        args.use_watermark = True
+        if emd == 0:
+            args.use_watermark = False
+
         args.epoch = 100
-        main(args,loadpath='./save/model/'+str(args.frac)+'/'+str(args.embed_dim)+'/'+ args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
-                args.shard_per_user) +'_'+str(args.epochs)+'.pt')
+        model_save_path = "./save/glob_models/" + str(args.frac)+'/'+str(args.embed_dim)+'/accs_' + args.alg + '_' + args.dataset + '_' + str(args.num_users) + '_' + str(
+                args.shard_per_user) + '_iter'+ str(args.use_watermark) + str(args.epochs) + '.pt'
+        main(args,loadpath=model_save_path)
 
