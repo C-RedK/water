@@ -97,11 +97,11 @@ class CNNCifar(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return F.log_softmax(x, dim=1)
-
-    def params(self):
-        return self.fc3.weight
-
-
+    
+    #返回所有fc层权重,放到一个list里
+    def head_params(self):
+        return [self.fc1.weight, self.fc2.weight, self.fc3.weight]
+    
 class CNNCifar100(nn.Module):
     def __init__(self, args):
         super(CNNCifar100, self).__init__()

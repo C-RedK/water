@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import torch
 import os
+from models.Update import LocalUpdate_fine
 
 from utils.options import args_parser
 from utils.train_utils import get_model,getdata
@@ -127,10 +128,10 @@ def main(args,loadpath):
             # tyl：这个if判断感觉没用啊，而且这个类对象不应该只需要每个client执行一次吗？
             if args.epochs == iter:
                 # 都是500，没啥影响
-                client = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_ft],
+                client = LocalUpdate_fine(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_ft],
                                     X=dict_X[idx], b=dict_b[idx])
             else:
-                client = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_tr],
+                client = LocalUpdate_fine(args=args, dataset=dataset_train, idxs=dict_users_train[idx][:args.m_tr],
                                     X=dict_X[idx], b=dict_b[idx])
 
             # 复制一份全局模型

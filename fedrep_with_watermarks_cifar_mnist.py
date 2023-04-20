@@ -108,8 +108,8 @@ def main(args,seed):
         # 最后一轮训练慢的原因是 最后一轮选择了全部客户端进行训练，所以才会这么慢
         # 原本可能选十几二十个，但是现在是所有的都他妈的要来训练，自然就满了
         # tyl：可以考虑最后一轮正常还是采样训练，多加一轮进行测试精度和测试水印（这样合理一点！）     
-        if iter == args.epochs:
-            m = args.num_users
+        #if iter == args.epochs:
+        #    m = args.num_users
 
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         idxs_users.sort()
@@ -146,8 +146,8 @@ def main(args,seed):
                                                             lr=args.lr, last=last, args=args, net_glob=model_glob)
             # zyb：分离水印嵌入和验证过程
             if args.use_watermark: 
-             success_rate = client.validate(net=model_client.to(args.device))
-             success_rates.append(success_rate)
+                success_rate = client.validate(net=model_client.to(args.device))
+                success_rates.append(success_rate)
 
             loss_locals.append(copy.deepcopy(loss))
             total_len += lens[idx]
@@ -331,7 +331,7 @@ if __name__ == '__main__':
     args = args_parser()
     embed_dims = [0,8,16,32,64,128,256,512]
     args.use_watermark = True
-    args.epochs = 100
+    args.epochs = 50
     for embed_dim in embed_dims:
         args.use_watermark = True
         if embed_dim == 0:
