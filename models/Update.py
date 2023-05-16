@@ -568,8 +568,9 @@ class LocalUpdate(object):
         self.X = None
         self.b = None
         if args.use_watermark:
-            self.X = torch.tensor(X, dtype=torch.float32).to(self.args.device)
-            self.b = torch.tensor(b, dtype=torch.float32).to(self.args.device)
+            self.X = X.clone().detach().to(dtype=torch.float32, device=self.args.device)
+            self.b = b.clone().detach().to(dtype=torch.float32, device=self.args.device)
+
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.01, args=None, net_glob=None):
         bias_p = []
@@ -594,7 +595,7 @@ class LocalUpdate(object):
             if self.args.alg == 'fedavg' or self.args.alg == 'prox':
                 local_eps = 10
                 if 'cifar' in self.args.dataset:
-                    w_glob_keys = [net.weight_keys[i] for i in [0, 1, 3, 4]]
+                    w_glob_keys = [net.weight_keys[i] for i in [0,3, 4]]
                 elif 'mnist' in args.dataset and args.model == 'cnn':
                     w_glob_keys = [net_glob.weight_keys[i] for i in [0, 1, 3, 4]]
             else:
@@ -639,11 +640,16 @@ class LocalUpdate(object):
                 regularized_loss = 0
                 if args.use_watermark:
                     # 得到参数 转化为一维向量
-                    para = net.params()
-                    y = para.view(1, -1)
+                    para = net.head_params()
+                    # y 是一个一维向量，用来存储参数
+                    y = torch.tensor([], dtype=torch.float32).to(self.args.device)
+                    #将每个张量转化为一维向量，然后拼接在一起
+                    for i in para:
+                        y = torch.cat((y, i.view(-1)), 0)
+                    y = y.view(1,-1).to(self.args.device)
                     # 计算损失
                     regularized_loss = args.scale * torch.sum(
-                        F.binary_cross_entropy(input=torch.sigmoid(torch.matmul(y, self.X)), target=self.b))
+                        F.binary_cross_entropy(input=torch.sigmoid(torch.matmul(y, self.X.to(self.args.device))), target=self.b.to(self.args.device)))
                 (loss + regularized_loss).backward()
                 # 水印部分----------------------------------------------------------------------------------
                 optimizer.step()
@@ -659,13 +665,19 @@ class LocalUpdate(object):
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
 
-        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), self.indd
+        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), self.indd,net
 
-    def validate(self,net):
+    def validate(self,net,device):
         success_rate = -1
-        pred_b = get_layer_weights_and_predict(net,self.X.cpu().numpy())
-        success_rate = compute_BER(pred_b=pred_b,b=self.b.cpu().numpy())
+        pred_b = get_layer_weights_and_predict(net,self.X.to(device),device)
+        success_rate = compute_BER(pred_b.to(device),self.b.to(device),device)
         return success_rate
+
+def validate(X,b,net,device):
+    success_rate = -1
+    pred_b = get_layer_weights_and_predict(net,X.to(device),device)
+    success_rate = compute_BER(pred_b.to(device),b.to(device),device)
+    return success_rate
 
 # Generic local update class, implements local updates for FedRep, FedPer, LG-FedAvg, FedAvg, FedProx
 class LocalUpdate_fine(object):

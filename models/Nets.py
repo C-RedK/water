@@ -100,7 +100,12 @@ class CNNCifar(nn.Module):
     
     #返回所有fc层权重,放到一个list里
     def head_params(self):
-        return [self.fc1.weight, self.fc2.weight, self.fc3.weight]
+        return [self.fc2.weight, self.fc3.weight]
+    #返回head层的参数
+    def get_params(self):
+        state_dict = self.state_dict()
+        params = {k: v.cpu().numpy() for k,v in state_dict.items() if 'conv' not in k and 'fc1' not in k}        
+        return params
     
 class CNNCifar100(nn.Module):
     def __init__(self, args):
